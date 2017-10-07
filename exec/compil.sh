@@ -1,0 +1,1 @@
+g++ -o exec.exe main.cpp

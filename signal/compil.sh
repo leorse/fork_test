@@ -1,0 +1,1 @@
+g++ -o signal.exe main.cpp

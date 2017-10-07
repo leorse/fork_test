@@ -1,0 +1,1 @@
+g++ -o pipe.exe main.cpp
