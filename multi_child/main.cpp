@@ -1,4 +1,5 @@
 #include <string>
+#include <stdio.h>
 #include <cstring>
 #include <iostream>
 #include <unistd.h>
@@ -115,7 +116,7 @@ void ClasserFils::libererPlace(pid_t pid)
     }
     if(i<NBFILS)
     {
-        journalPere("EPT   le fils %d avait la place:%d\n", pid, i);
+        journalPere("IPT   le fils %d avait la place:%d\n", pid, i);
         liste[i] = 0;
     }
 }
