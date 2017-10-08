@@ -1,0 +1,1 @@
+g++ -o mc.exe main.cpp
