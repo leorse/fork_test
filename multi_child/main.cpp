@@ -8,14 +8,14 @@
 
 using namespace std;
 
-#define NBFILS  52
+#define NBFILS  8
 
 int tab[][20] = 
 {
-    {15,16,28,45,32,22,34, 7,9 ,27,11,36,17,44,26, 0},
-    {25,26,38,55,24,32,44,17,19,37,21,16,51,54,76, 0},
-    {35,36,48,15,7, 42,54,27,29,47,31,26,33,64,46, 0},
-    {45,46,58,15,17,52,64,37,39,57,41,36, 7,14,28, 0},
+    {15,16,28,45,32,22,34, 7,9 ,27,11,36,17,14,26, 0},
+    //{25,26,38,55,24,32,44,17,19,37,21,16,51,54,76, 0},
+    //{35,36,48,15,7, 42,54,27,29,47,31,26,33,64,46, 0},
+    //{45,46,58,15,17,52,64,37,39,57,41,36, 7,14,28, 0},
     {0}
 };
 
@@ -66,7 +66,69 @@ int journalFils(int numFils, const char* str, ...)
     return 1;
 }
 
+//classe pour classer les fils selon un numéro réutilisable
+class ClasserFils
+{
+private:
+    pid_t liste[NBFILS];
+public:
+    ClasserFils(void);
+    int rechercherPlace(void);
+    void affecterPlace(pid_t pid, int place);
+    void libererPlace(pid_t pid);
+    void listerPlace(void);
+};
 
+ClasserFils::ClasserFils(void)
+{
+    memset(&this->liste, 0, sizeof(this->liste));
+}
+
+int ClasserFils::rechercherPlace(void)
+{
+    int i =0;
+    while(i<NBFILS && liste[i]!=0)
+    {
+        i++;
+    }
+    if(i==NBFILS)
+    {
+        return -1;
+    }
+    return i;
+}
+
+void ClasserFils::affecterPlace(pid_t pid, int place)
+{
+    liste[place] = pid;
+}
+
+void ClasserFils::libererPlace(pid_t pid)
+{
+    int i =0;
+    while(i<NBFILS && liste[i]!=pid)
+    {
+        i++;
+    }
+    if(i<NBFILS)
+    {
+        journalPere("EPT   le fils %d avait la place:%d\n", pid, i);
+        liste[i] = 0;
+    }
+}
+
+void ClasserFils::listerPlace(void)
+{
+    for(int i =0; i<NBFILS; i++)
+    {
+        journalPere("%03d: %5d - ", i+1, this->liste[i]);
+        if( (i%8)==0 && i>0)
+        {
+            journalPere("\n");
+        }
+    }
+    journalPere("\n");
+}
 
 int fermerJournaux()
 {
@@ -87,7 +149,11 @@ int main(int argc, char **argv)
     int numDat = 0;
     int nbFils = 0;
     int status  =0;
+    int numNouveauFils=0;
+
+    ClasserFils cf;
     
+    memset(&mempartagee, 0, sizeof(mempartagee));
     memset(&journaux, 0, sizeof(FILE*)*(NBFILS+1));
     initJournaux();
     cout << "oui oui c'est moi" << endl;
@@ -100,7 +166,6 @@ int main(int argc, char **argv)
         while(tab[numPil][numDat]!=0)
         {
             journalPere("IP    nbDat:%d\n",tab[numPil][numDat]);
-            //cout << "    je vais confier ça au fils:"<<numDat%NBFILS<<endl;
             
             if(nbFils>=NBFILS)
             {
@@ -114,20 +179,26 @@ int main(int argc, char **argv)
                 {
                     journalPere("EPT   le fils %d s'est terminé avec un signal, status:%d\n", fils_pid, WTERMSIG(status));
                 }
+                journalPere("IP    libération de la place pour le fils:%d\n", fils_pid);
+                cf.libererPlace(fils_pid);
                 nbFils--;
             }
+            numNouveauFils = cf.rechercherPlace();
+            journalPere("IP    une place pour un fils:%d\n", numNouveauFils);
             pid_t pid = fork();
             if (pid == 0)
             {
                 int attente = tab[numPil][numDat];
-                journalFils(nbFils, "IFC   Je suis le fils numéro %d, %d/%d/%d et j'attends %ds\n", nbFils, getpid(), numPil,numDat,attente);
+                journalFils(numNouveauFils, "IFC   Je suis le fils numéro %d, %d/%d/%d et j'attends %ds\n", numNouveauFils, getpid(), numPil,numDat,attente);
                 sleep(attente);
-                journalFils(nbFils, "IFC   Je suis le fils numéro %d, %d/%d/%d et j'ai terminé\n", nbFils, getpid(), numPil,numDat);
+                mempartagee[numNouveauFils] += attente;
+                journalFils(numNouveauFils, "IFC   Je suis le fils numéro %d, %d/%d/%d et j'ai terminé\n", numNouveauFils, getpid(), numPil,numDat);
                 exit(1);
             }
             else
             {
-                journalPere("IPC   je viens de créer le fils:%d/%d\n", pid, nbFils);
+                cf.affecterPlace(pid, numNouveauFils);
+                journalPere("IPC   je viens de créer le fils:%d/%d\n", pid, numNouveauFils);
                 nbFils++;
             }
             numDat++;
@@ -137,6 +208,7 @@ int main(int argc, char **argv)
     while(nbFils>0)
     {
         journalPere("IP    il me reste %d fils a attendre, j'attends un peu\n", nbFils);
+        cf.listerPlace();
         int fils_pid = wait(&status);
         if (WIFEXITED(status))
         {
@@ -146,11 +218,17 @@ int main(int argc, char **argv)
         {
             journalPere("EPT   le fils %d s'est terminé avec un signal, status:%d\n", fils_pid, WTERMSIG(status));
         }
+        cf.libererPlace(fils_pid);
         nbFils--;
     }
-
-    fermerJournaux();
+    for(int i =0;i<NBFILS;i++)
+    {
+        journalPere("%02d: %3d - ", i, mempartagee[i]);    
+    }
+    journalPere("\n"); 
     journalPere("EP    Traitement terminé\n");
+    fermerJournaux();
+    
     cout<<"Traitement terminé"<<endl;
 
     return 1;
